@@ -127,6 +127,14 @@ function initListeners() {
   document.getElementById("txn-modal").addEventListener("click", (e) => {
     if (e.target.id === "txn-modal") closeModal();
   });
+
+  // Window resize handler for responsive charts
+  window.addEventListener("resize", () => {
+    if (state.activeTab === "tab-overview" && state.overview) {
+      renderChart(state.overview.amb_forecast);
+      renderPieChart(state.overview.category_breakdown, state.overview.total_debit);
+    }
+  });
 }
 
 // Fetch Overview Data
@@ -313,16 +321,22 @@ function renderChart(forecast) {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
 
-  // Adjust canvas pixel density
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = 220 * dpr;
-  ctx.scale(dpr, dpr);
-
-  const w = rect.width;
+  const parent = canvas.parentElement;
+  const w = parent ? parent.clientWidth : (canvas.getBoundingClientRect().width || 600);
   const h = 220;
 
+  if (w <= 0) return;
+
+  // Adjust canvas pixel density for high DPI / Retina displays
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+
+  // Explicitly constrain CSS display size to container width
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+
+  ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
 
   // Demo EOD balances points (or simulated timeline)

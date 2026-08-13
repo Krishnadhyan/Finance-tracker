@@ -765,12 +765,28 @@ body {
 .green-btn:hover { background: rgba(16, 185, 129, 0.4); color: white; }
 .amber-btn:hover { background: rgba(245, 158, 11, 0.4); color: white; }
 
-/* Pie Chart Wrapper */
+/* Pie Chart Wrapper & Responsive Canvas */
+.chart-container {
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+#eod-chart {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 220px !important;
+  display: block;
+}
+
 .pie-chart-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 10px 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* Pagination Bar */
