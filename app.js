@@ -26,6 +26,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Programmatic Tab Switcher
 function switchTab(targetPaneId) {
+  if (!targetPaneId) return;
+
+  // Update tab buttons active state
   const tabs = document.querySelectorAll(".nav-tab");
   tabs.forEach(tab => {
     if (tab.dataset.tab === targetPaneId) {
@@ -35,15 +38,19 @@ function switchTab(targetPaneId) {
     }
   });
 
+  // Update tab panes visibility
   document.querySelectorAll(".tab-pane").forEach(pane => {
     if (pane.id === targetPaneId) {
       pane.classList.add("active");
+      pane.style.display = "block";
     } else {
       pane.classList.remove("active");
+      pane.style.display = "none";
     }
   });
 
   state.activeTab = targetPaneId;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Trigger re-render of canvas charts when active tab changes
   if (targetPaneId === "tab-overview" && state.overview) {

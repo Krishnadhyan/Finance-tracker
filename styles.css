@@ -162,6 +162,19 @@ body {
   box-shadow: 0 4px 15px rgba(147, 51, 234, 0.3);
 }
 
+.nav-tab * {
+  pointer-events: none;
+}
+
+/* Tab Panes Visibility */
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
 /* Alert Banner */
 .alert-banner {
   display: flex;
