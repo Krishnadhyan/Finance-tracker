@@ -243,6 +243,100 @@ body {
 .green-card { border-top: 3px solid var(--accent-green); }
 .rose-card { border-top: 3px solid var(--accent-rose); }
 
+/* Floating Tooltip Bubble */
+.tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+
+.tooltip-bubble {
+  position: absolute;
+  top: 130%;
+  right: 0;
+  width: 270px;
+  background: rgba(18, 24, 38, 0.96);
+  border: 1px solid var(--border-highlight);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(244, 63, 94, 0.25);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+  pointer-events: none;
+  text-align: left;
+}
+
+.tooltip-wrapper:hover .tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Tooltip Pointer Arrow */
+.tooltip-bubble::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 10px;
+  width: 10px;
+  height: 10px;
+  background: #121826;
+  border-left: 1px solid var(--border-highlight);
+  border-top: 1px solid var(--border-highlight);
+  transform: rotate(45deg);
+}
+
+.tooltip-title {
+  font-family: var(--font-heading);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.tooltip-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tooltip-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-main);
+}
+
+.tooltip-ratings {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+
+.rate-item {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.rate-green { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.rate-amber { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.rate-rose { background: rgba(244, 63, 94, 0.15); color: #f43f5e; }
+
 /* Recurring Subscriptions Grid */
 .recurring-grid {
   display: grid;

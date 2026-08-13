@@ -125,7 +125,23 @@
           <div class="kpi-card rose-card">
             <div class="kpi-head">
               <span>Financial Health Index</span>
-              <span class="kpi-icon">🛡️</span>
+              <div class="tooltip-wrapper">
+                <span class="kpi-icon tooltip-icon">🛡️</span>
+                <div class="tooltip-bubble">
+                  <div class="tooltip-title">🛡️ Financial Health Index</div>
+                  <p class="tooltip-desc">Measures account safety from bank penalties & cash flow risks:</p>
+                  <ul class="tooltip-list">
+                    <li>🎯 <strong>AMB Target (40%):</strong> Target balance safety</li>
+                    <li>🔄 <strong>Cash Flow (35%):</strong> Income vs spending ratio</li>
+                    <li>⚠️ <strong>Penalty Risk (25%):</strong> Shortfall warning defense</li>
+                  </ul>
+                  <div class="tooltip-ratings">
+                    <span class="rate-item rate-green">85–100: Excellent</span>
+                    <span class="rate-item rate-amber">70–84: Good</span>
+                    <span class="rate-item rate-rose">&lt;70: Action Needed</span>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="kpi-value" id="kpi-health-score">--/100</div>
             <div class="kpi-sub" id="kpi-health-rating">Evaluating compliance...</div>
