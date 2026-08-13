@@ -54,6 +54,55 @@ def clean_html_to_text(html_or_text):
     return clean_txt
 
 
+def extract_party_and_vpa(clean_txt, txn_type):
+    """Extract vendor/merchant name and VPA accurately across all HDFC alert formats."""
+    body = re.split(r"(?:if you did not authorize|please call|sms block|\bref\.?\s*no|call \d+)", clean_txt, flags=re.IGNORECASE)[0]
+
+    vpa = None
+    party = None
+
+    vpa_match = re.search(r'\b[\w\.-]+@[\w\.-]+\b', body)
+    if vpa_match:
+        vpa = vpa_match.group(0).strip()
+
+    sender_match = re.search(r"Sender:\s*([A-Za-z0-9\.\&\s\-\_]+?)(?:\s*\(VPA:\s*[\w\.-]+@[\w\.-]+\)|\s*on|\s*via|\.|$)", body, re.IGNORECASE)
+    if sender_match and sender_match.group(1).strip():
+        party = sender_match.group(1).strip()
+        return party, vpa
+
+    autopay_match = re.search(r"(?:payment for|payment of|for)\s+([A-Za-z0-9\.\&\s\-\_]+?)(?:\s*,\s*set|\s+was|\s+on|\.|$)", body, re.IGNORECASE)
+    if any(k in body.lower() for k in ["autopay", "e-mandate", "auto payment"]) and autopay_match:
+        party = autopay_match.group(1).strip()
+        return party, vpa
+
+    vpa_name_match = re.search(r"(?:towards|to)\s+VPA\s+[\w\.-]+@[\w\.-]+\s+(?:\((.*?)\)|([A-Za-z0-9\.\&\s\-\_]+?))(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
+    if vpa_name_match:
+        party = (vpa_name_match.group(1) or vpa_name_match.group(2) or "").strip()
+        if party:
+            return party, vpa
+
+    towards_match = re.search(r"(?:towards|to)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
+    if towards_match:
+        cand = towards_match.group(1).strip()
+        if "account" in cand.lower():
+            cand_sub = re.search(r"(?:to|towards)\s+(?:VPA\s+[\w\.-]+|\s+)?(.*)", cand, re.IGNORECASE)
+            if cand_sub:
+                cand = cand_sub.group(1).strip()
+        if cand and cand.lower() not in ["vpa", "account"]:
+            party = cand
+            return party, vpa
+
+    if txn_type == "credit":
+        credit_match = re.search(r"(?:from|by)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
+        if credit_match:
+            cand = credit_match.group(1).strip()
+            if cand and cand.lower() not in ["vpa", "account"]:
+                party = cand
+                return party, vpa
+
+    return party, vpa
+
+
 def main():
     creds = None
     if os.path.exists("token.json"):
@@ -106,11 +155,7 @@ def main():
             date_match = re.search(r'on\s?(\d{2}[-/]\d{2}[-/]\d{2,4})', clean_txt, re.IGNORECASE)
             date = date_match.group(1) if date_match else None
 
-            merchant_match = re.search(r'(?:VPA|by|from|to)\s+([A-Za-z0-9@._\s]+?)(?:\s+on|\s+via|\s+through|$)', clean_txt, re.IGNORECASE)
-            party = merchant_match.group(1).strip() if merchant_match else None
-
-            vpa_match = re.search(r'\b[\w\.-]+@[\w\.-]+\b', clean_txt)
-            vpa = vpa_match.group(0).strip() if vpa_match else None
+            party, vpa = extract_party_and_vpa(clean_txt, txn_type)
 
             bank = None
             if from_header:

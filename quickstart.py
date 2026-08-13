@@ -11,7 +11,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 
@@ -30,7 +29,6 @@ def extract_body_text(payload):
             pass
 
     parts = payload.get("parts", [])
-    # First try to find text/html or text/plain parts
     for part in parts:
         p_mime = part.get("mimeType", "")
         if p_mime in ["text/plain", "text/html"]:
@@ -38,7 +36,6 @@ def extract_body_text(payload):
             if text:
                 return text
 
-    # Fallback to any subpart
     for part in parts:
         text = extract_body_text(part)
         if text:
@@ -55,6 +52,62 @@ def clean_html_to_text(html_or_text):
     raw_txt = soup.get_text().strip()
     clean_txt = re.sub(r'\s+', ' ', raw_txt)
     return clean_txt
+
+
+def extract_party_and_vpa(clean_txt, txn_type):
+    """Extract vendor/merchant name and VPA accurately across all HDFC alert formats."""
+    # 1. Truncate text before disclaimer/footer boilerplate
+    body = re.split(r"(?:if you did not authorize|please call|sms block|\bref\.?\s*no|call \d+)", clean_txt, flags=re.IGNORECASE)[0]
+
+    vpa = None
+    party = None
+
+    # Extract VPA if present anywhere in body
+    vpa_match = re.search(r'\b[\w\.-]+@[\w\.-]+\b', body)
+    if vpa_match:
+        vpa = vpa_match.group(0).strip()
+
+    # Pattern A: Sender: <NAME> (VPA: <VPA>) (Credit emails)
+    sender_match = re.search(r"Sender:\s*([A-Za-z0-9\.\&\s\-\_]+?)(?:\s*\(VPA:\s*[\w\.-]+@[\w\.-]+\)|\s*on|\s*via|\.|$)", body, re.IGNORECASE)
+    if sender_match and sender_match.group(1).strip():
+        party = sender_match.group(1).strip()
+        return party, vpa
+
+    # Pattern B: AutoPay / E-mandate for <MERCHANT>
+    autopay_match = re.search(r"(?:payment for|payment of|for)\s+([A-Za-z0-9\.\&\s\-\_]+?)(?:\s*,\s*set|\s+was|\s+on|\.|$)", body, re.IGNORECASE)
+    if any(k in body.lower() for k in ["autopay", "e-mandate", "auto payment"]) and autopay_match:
+        party = autopay_match.group(1).strip()
+        return party, vpa
+
+    # Pattern C: towards/to VPA <VPA> (<NAME>) or towards/to VPA <VPA> <NAME>
+    vpa_name_match = re.search(r"(?:towards|to)\s+VPA\s+[\w\.-]+@[\w\.-]+\s+(?:\((.*?)\)|([A-Za-z0-9\.\&\s\-\_]+?))(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
+    if vpa_name_match:
+        party = (vpa_name_match.group(1) or vpa_name_match.group(2) or "").strip()
+        if party:
+            return party, vpa
+
+    # Pattern D: towards/to <NAME> on <DATE>
+    towards_match = re.search(r"(?:towards|to)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
+    if towards_match:
+        cand = towards_match.group(1).strip()
+        if "account" in cand.lower():
+            cand_sub = re.search(r"(?:to|towards)\s+(?:VPA\s+[\w\.-]+\s+)?(.*)", cand, re.IGNORECASE)
+            if cand_sub:
+                cand = cand_sub.group(1).strip()
+        if cand and cand.lower() not in ["vpa", "account"]:
+            party = cand
+            return party, vpa
+
+    # Pattern E (Credit): credited ... by/from <NAME>
+    if txn_type == "credit":
+        credit_match = re.search(r"(?:from|by)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
+        if credit_match:
+            cand = credit_match.group(1).strip()
+            if cand and cand.lower() not in ["vpa", "account"]:
+                party = cand
+                return party, vpa
+
+    return party, vpa
 
 
 def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
@@ -81,13 +134,12 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
         except ValueError:
             amount = None
 
-    # 3. Extract Date
+    # 3. Extract Date & Time
     date = None
     date_match = re.search(r"(?:on|date)\s+(\d{2}[-/]\d{2}[-/]\d{2,4})", clean_txt, re.IGNORECASE)
     if date_match:
         date = date_match.group(1)
 
-    # Fallback date from timestamp if missing
     dt_object = datetime.datetime.fromtimestamp(internal_date_ms / 1000.0)
     if not date:
         date = dt_object.strftime("%d-%m-%y")
@@ -95,25 +147,8 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
     time_string = dt_object.strftime("%I:%M %p")
     day_of_week = dt_object.strftime("%A")
 
-    # 4. Extract VPA & Merchant / Party
-    vpa_match = re.search(r'\b[\w\.-]+@[\w\.-]+\b', clean_txt)
-    vpa = vpa_match.group(0).strip() if vpa_match else None
-
-    party = None
-    if txn_type == "debit":
-        merchant_match = re.search(r"to\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", clean_txt, re.IGNORECASE)
-        if merchant_match:
-            party = merchant_match.group(1).strip()
-    elif txn_type == "credit":
-        merchant_match = re.search(r"(?:from|by)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", clean_txt, re.IGNORECASE)
-        if merchant_match:
-            party = merchant_match.group(1).strip()
-
-    # Clean up party string if it captured unnecessary prefix like "account 4152 to VPA ..."
-    if party and "account" in party.lower():
-        party_sub = re.search(r"to\s+(?:VPA\s+[\w\.-]+\s+)?(.*)", party, re.IGNORECASE)
-        if party_sub:
-            party = party_sub.group(1).strip()
+    # 4. Extract Party/Merchant and VPA
+    party, vpa = extract_party_and_vpa(clean_txt, txn_type)
 
     # 5. Extract Bank Name
     bank = None
@@ -122,10 +157,7 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
         if bank_match:
             bank = bank_match.group(1).upper()
 
-    # Clean summary text snippet
     summary = re.sub(r'\s+', ' ', clean_txt).strip()
-
-    # Unique transaction ID using msg_id
     txn_id = f"TXN_{date.replace('/', '_').replace('-', '_')}_{msg_id}"
 
     return {
@@ -210,7 +242,6 @@ def main():
                 print(f"[{index}/{len(all_messages)}] {txn['date']} {txn['day_of_week']} {txn['time']}: {txn['type'].upper()} - {txn['direction']} {txn['party'] or 'Unknown'} - Rs.{txn['amount']}")
                 transactions.append(txn)
 
-        # Save to transactions.json
         output_file = "transactions.json"
         with open(output_file, "w") as f:
             json.dump(transactions, f, indent=4)
