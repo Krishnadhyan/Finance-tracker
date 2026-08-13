@@ -12,11 +12,43 @@ if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
 
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
-# Auto-categorization rule mapping
+# Phase 1: Deterministic Vendor Memory Cache (Exact & Substring Mappings)
+VENDOR_CATEGORY_MAP = {
+    # Food & Dining
+    "ZOMATO": ("Food & Dining", "Food Delivery"),
+    "ZOMATO LIMITED": ("Food & Dining", "Food Delivery"),
+    "SWIGGY": ("Food & Dining", "Food Delivery"),
+    "SWIGGY LTD": ("Food & Dining", "Food Delivery"),
+    "DOMINOS PIZZA": ("Food & Dining", "Fast Food"),
+    "DOMINOS": ("Food & Dining", "Fast Food"),
+    "NANDHINI DELUXE MINERVA CIRCLE": ("Food & Dining", "Restaurants"),
+    "M S HORNBILL FOODS": ("Food & Dining", "Restaurants"),
+    # Bills & Utilities
+    "BANGALORE BROADBAND NETWORK PVT LTD": ("Utilities", "Broadband / Internet"),
+    "JIO PREPAID RECHARGES": ("Utilities", "Mobile Recharge"),
+    "JIO PLATFORM LTD FTTX": ("Utilities", "Broadband / Internet"),
+    "RDPR KARNATAKA BAPUJI SEVA KENDRA MUNICIPAL BILL": ("Utilities", "Municipal Bills"),
+    "PAYTM UTILITY": ("Utilities", "Bill Payments"),
+    # Entertainment & Digital
+    "GOOGLE PLAY": ("Entertainment", "Apps & Subscriptions"),
+    "JIOHOTSTAR": ("Entertainment", "Streaming Subscriptions"),
+    # Travel & Transport
+    "UBER INDIA SYSTEMS PRIVATE LIMITED": ("Transport", "Cabs / Rides"),
+    "IRCTC": ("Transport", "Train Tickets"),
+    "PAYTM TRAIN TICKETS": ("Transport", "Train Tickets"),
+    # Groceries & Shopping
+    "BLINKIT": ("Groceries", "Instant Grocery"),
+    "AMAZON INDIA": ("Shopping", "E-Commerce"),
+    "SREE LAKSHMI VENKATESHWARA MEDICALS": ("Health & Medical", "Pharmacy"),
+    "L AND T FINANCE LTD": ("Financial", "Loan / EMI"),
+    "MSRATHODBUILDMARTPRIVATELIMITED": ("Shopping", "Home Improvement"),
+}
+
+# Fallback Keyword Rules
 CATEGORY_RULES = [
-    ({"zomato", "swiggy", "hornbill", "restaurant", "food", "nandhini", "hotel"}, "Food & Dining", "Restaurants"),
+    ({"zomato", "swiggy", "hornbill", "restaurant", "food", "nandhini", "hotel", "domino"}, "Food & Dining", "Restaurants"),
     ({"uber", "irctc", "ola", "fastag", "redbus", "abhibus"}, "Travel & Transport", "Cabs / Travel"),
-    ({"jio", "airtel", "vi", "bsnl", "electricity", "bescom", "water", "gas", "paytm utility", "bapuji seva"}, "Bills & Utilities", "Recharge / Utility"),
+    ({"jio", "airtel", "vi", "bsnl", "electricity", "bescom", "water", "gas", "paytm utility", "broadband"}, "Bills & Utilities", "Recharge / Utility"),
     ({"blinkit", "zepto", "instamart", "bigbasket", "supermarket", "groceries"}, "Groceries & Supplies", "Groceries"),
     ({"amazon", "flipkart", "myntra", "meesho", "decathlon"}, "Shopping", "E-Commerce"),
     ({"medicals", "pharmacy", "apollo", "1mg", "dr"}, "Health & Medical", "Pharmacy / Doctor"),
@@ -24,12 +56,43 @@ CATEGORY_RULES = [
 
 
 def auto_categorize(party, raw_text):
-    """Categorize transaction based on vendor name or raw text snippet."""
-    text_search = f"{party or ''} {raw_text or ''}".lower()
+    """
+    Deterministic Tagging Layer:
+    1. Check Vendor Memory Cache (Exact / Uppercase Match).
+    2. Substring Vendor Matching.
+    3. Keyword Category Rules.
+    4. Personal / Person Transfer Detection.
+    """
+    party_clean = (party or "").strip()
+    party_upper = party_clean.upper()
+
+    if not party_clean:
+        return "Uncategorized", "General"
+
+    # 1. Exact Match in Vendor Memory Cache
+    if party_clean in VENDOR_CATEGORY_MAP:
+        return VENDOR_CATEGORY_MAP[party_clean]
+    if party_upper in VENDOR_CATEGORY_MAP:
+        return VENDOR_CATEGORY_MAP[party_upper]
+
+    # 2. Substring Match in Vendor Memory Cache
+    for vendor_key, cat_tuple in VENDOR_CATEGORY_MAP.items():
+        if vendor_key in party_upper or party_upper in vendor_key:
+            return cat_tuple
+
+    # 3. Fallback Keyword Rule Engine
+    text_search = f"{party_clean} {raw_text or ''}".lower()
     for keywords, category, sub_category in CATEGORY_RULES:
         if any(kw in text_search for kw in keywords):
             return category, sub_category
-    return "General / Uncategorized", "Other"
+
+    # 4. Peer-to-Peer / Personal Transfer Detection
+    if any(prefix in party_clean.lower() for prefix in ["mr ", "mrs ", "dr "]):
+        return "Transfers & Personal", "Personal Transfer"
+    if len(party_clean.split()) >= 2 and not any(char.isdigit() for char in party_clean):
+        return "Transfers & Personal", "Personal Transfer"
+
+    return "Uncategorized", "General"
 
 
 def parse_to_iso_date(date_str):
@@ -106,7 +169,7 @@ def update_last_processed_msg_id(newest_msg_id):
 
 
 def upsert_transactions(transactions):
-    """Upsert structured transactions into Supabase PostgreSQL database."""
+    """Upsert structured transactions into Supabase PostgreSQL database with deterministic tagging."""
     client = get_supabase_client()
     if not client:
         print("[Supabase Warning] Supabase credentials not configured in .env. Skipping cloud upload.")
@@ -129,8 +192,8 @@ def upsert_transactions(transactions):
             "party": t.get("party"),
             "vpa": t.get("vpa"),
             "bank": t.get("bank"),
-            "category": t.get("category") or cat,
-            "sub_category": t.get("sub_category") or sub_cat,
+            "category": cat,
+            "sub_category": sub_cat,
             "raw_text": t.get("raw_text"),
             "source": t.get("source")
         })
@@ -142,7 +205,7 @@ def upsert_transactions(transactions):
             chunk = records[i:i + chunk_size]
             res = client.table("transactions").upsert(chunk).execute()
             total_upserted += len(chunk)
-        print(f"[Supabase] Successfully upserted {total_upserted} transactions to cloud PostgreSQL.")
+        print(f"[Supabase] Successfully tagged and upserted {total_upserted} transactions to cloud PostgreSQL.")
         return total_upserted
     except Exception as e:
         print(f"[Supabase Error] Failed to upsert transactions: {e}")
@@ -248,85 +311,22 @@ def calculate_amb_metrics(target_amb=10000.0, current_balance=0.0, cycle_start_d
     }
 
 
-def get_full_sql_schema():
-    """Returns SQL statements for all required tables in Supabase SQL Editor."""
-    return """
--- Execute the following SQL in Supabase -> SQL Editor:
-
--- 1. Transactions Table
-CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT PRIMARY KEY,
-    date DATE NOT NULL,
-    timestamp_ms BIGINT,
-    day_of_week TEXT,
-    time TEXT,
-    amount NUMERIC(12,2) NOT NULL,
-    type TEXT NOT NULL,
-    direction TEXT,
-    party TEXT,
-    vpa TEXT,
-    bank TEXT,
-    category TEXT,
-    sub_category TEXT,
-    notes TEXT,
-    raw_text TEXT,
-    source TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Sync State Checkpoint Table
-CREATE TABLE IF NOT EXISTS sync_state (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. Monthly Anchors Table
-CREATE TABLE IF NOT EXISTS monthly_anchors (
-    month_year TEXT PRIMARY KEY,
-    anchor_balance NUMERIC(12,2) NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 4. Daily Balances Table
-CREATE TABLE IF NOT EXISTS daily_balances (
-    date DATE PRIMARY KEY,
-    closing_balance NUMERIC(12,2) NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_party ON transactions(party);
-"""
-
-
 def sync_existing_json_to_supabase():
-    """Import existing transactions.json file into Supabase cloud database."""
+    """Import existing transactions.json file into Supabase cloud database with deterministic tags."""
     json_path = "transactions.json"
     if not os.path.exists(json_path):
         print(f"[Note] {json_path} not found.")
         return 0
     with open(json_path, "r") as f:
         data = json.load(f)
-    print(f"Loaded {len(data)} transactions from {json_path}. Uploading to Supabase...")
+    print(f"Loaded {len(data)} transactions from {json_path}. Tagging & uploading to Supabase...")
     return upsert_transactions(data)
 
 
 if __name__ == "__main__":
-    print("=== Supabase Finance Tracker & AMB Engine ===")
+    print("=== Supabase Finance Tracker & Tagging Engine ===")
     if is_supabase_configured():
         print(f"Supabase configured: Connected to {SUPABASE_URL}")
-        last_id = get_last_processed_msg_id()
-        if not last_id:
-            print("No checkpoint found in sync_state. Importing initial dataset...")
-            sync_existing_json_to_supabase()
+        sync_existing_json_to_supabase()
     else:
         print("[Note] Supabase credentials not set in .env yet.")
-        print("\n--- Full SQL Schema To Run in Supabase SQL Editor ---")
-        print(get_full_sql_schema())
-
-    print("\n--- Average Monthly Balance (AMB) Calculation Engine ---")
-    metrics = calculate_amb_metrics(target_amb=10000.0, current_balance=6000.0)
-    for k, v in metrics.items():
-        print(f"{k}: {v}")
