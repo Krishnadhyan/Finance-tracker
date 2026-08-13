@@ -8,6 +8,8 @@ const API_BASE = "";
 let state = {
   overview: null,
   transactions: [],
+  filteredTransactions: [],
+  visibleTxnLimit: 10,
   targetAmb: 10000,
   anchorBalance: 10000,
   activeTab: "tab-overview",
@@ -22,22 +24,46 @@ document.addEventListener("DOMContentLoaded", () => {
   loadTransactionsData();
 });
 
-// Tab Switcher
+// Programmatic Tab Switcher
+function switchTab(targetPaneId) {
+  const tabs = document.querySelectorAll(".nav-tab");
+  tabs.forEach(tab => {
+    if (tab.dataset.tab === targetPaneId) {
+      tab.classList.add("active");
+    } else {
+      tab.classList.remove("active");
+    }
+  });
+
+  document.querySelectorAll(".tab-pane").forEach(pane => {
+    if (pane.id === targetPaneId) {
+      pane.classList.add("active");
+    } else {
+      pane.classList.remove("active");
+    }
+  });
+
+  state.activeTab = targetPaneId;
+
+  // Trigger re-render of canvas charts when active tab changes
+  if (targetPaneId === "tab-overview" && state.overview) {
+    setTimeout(() => {
+      renderChart(state.overview.amb_forecast);
+      renderPieChart(state.overview.category_breakdown, state.overview.total_debit);
+    }, 50);
+  } else if (targetPaneId === "tab-amb") {
+    runSimulatorForecast();
+  }
+}
+
+// Make switchTab globally accessible for HTML onclick attributes
+window.switchTab = switchTab;
+
 function initTabs() {
   const tabs = document.querySelectorAll(".nav-tab");
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
-      tabs.forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-
-      const targetPaneId = tab.dataset.tab;
-      document.querySelectorAll(".tab-pane").forEach(pane => {
-        pane.classList.remove("active");
-        if (pane.id === targetPaneId) {
-          pane.classList.add("active");
-        }
-      });
-      state.activeTab = targetPaneId;
+      switchTab(tab.dataset.tab);
     });
   });
 }
@@ -73,6 +99,15 @@ function initListeners() {
   document.getElementById("txn-search").addEventListener("input", filterTransactions);
   document.getElementById("filter-category").addEventListener("change", filterTransactions);
   document.getElementById("filter-type").addEventListener("change", filterTransactions);
+
+  // Load More Transactions button
+  const btnLoadMore = document.getElementById("btn-load-more");
+  if (btnLoadMore) {
+    btnLoadMore.addEventListener("click", () => {
+      state.visibleTxnLimit += 10;
+      renderTransactionsTable(state.filteredTransactions);
+    });
+  }
 
   // Vendor Tagging tester
   document.getElementById("btn-test-tag").addEventListener("click", testVendorTagging);
@@ -147,8 +182,91 @@ function renderOverview(data) {
     document.getElementById("alert-message").textContent = fc.message;
   }
 
-  // Render Category Bars
+  // Render Category Bars & Pie Chart
   renderCategoryBars(data.category_breakdown, data.total_debit);
+  renderPieChart(data.category_breakdown, data.total_debit);
+}
+
+// Category Colors for Pie Chart & Bars
+const CATEGORY_COLORS = {
+  "Food & Dining": "#9333ea",
+  "Utilities": "#06b6d4",
+  "Bills & Utilities": "#06b6d4",
+  "Travel & Transport": "#10b981",
+  "Transport": "#10b981",
+  "Groceries": "#f59e0b",
+  "Groceries & Supplies": "#f59e0b",
+  "Shopping": "#f43f5e",
+  "Entertainment": "#ec4899",
+  "Health & Medical": "#3b82f6",
+  "Transfers & Personal": "#8b5cf6",
+  "Uncategorized": "#64748b"
+};
+
+// Donut / Pie Chart Renderer for Category Spending
+function renderPieChart(breakdown, totalDebit) {
+  const canvas = document.getElementById("category-pie-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const dpr = window.devicePixelRatio || 1;
+  const parent = canvas.parentElement;
+  const width = Math.min(parent ? parent.clientWidth : 280, 280);
+  const height = 180;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  ctx.scale(dpr, dpr);
+
+  ctx.clearRect(0, 0, width, height);
+
+  const sortedCats = Object.entries(breakdown || {}).sort((a, b) => b[1] - a[1]);
+  if (sortedCats.length === 0 || totalDebit <= 0) {
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No spending data available", width / 2, height / 2);
+    return;
+  }
+
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const outerRadius = 70;
+  const innerRadius = 42;
+
+  let startAngle = -Math.PI / 2;
+
+  sortedCats.forEach(([cat, amt]) => {
+    const sliceAngle = (amt / totalDebit) * (Math.PI * 2);
+    const endAngle = startAngle + sliceAngle;
+    const color = CATEGORY_COLORS[cat] || "#64748b";
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+    ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
+    ctx.closePath();
+
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "#121826";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    startAngle = endAngle;
+  });
+
+  // Donut center text
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 14px Outfit, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("₹" + Math.round(totalDebit).toLocaleString("en-IN"), centerX, centerY - 6);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "11px Inter, sans-serif";
+  ctx.fillText("Total Spent", centerX, centerY + 10);
 }
 
 // Category Spending Bars
@@ -167,13 +285,15 @@ function renderCategoryBars(breakdown, totalDebit) {
     const pct = totalDebit > 0 ? Math.round((amt / totalDebit) * 100) : 0;
     const item = document.createElement("div");
     item.className = "cat-bar-item";
+    const color = CATEGORY_COLORS[cat] || "#7f00ff";
+
     item.innerHTML = `
       <div class="cat-bar-header">
-        <strong>${cat}</strong>
+        <strong><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px;"></span>${cat}</strong>
         <span>₹${amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${pct}%)</span>
       </div>
       <div class="cat-bar-bg">
-        <div class="cat-bar-fill" style="width: ${pct}%"></div>
+        <div class="cat-bar-fill" style="width: ${pct}%; background: ${color};"></div>
       </div>
     `;
     container.appendChild(item);
@@ -388,7 +508,9 @@ async function loadTransactionsData() {
     const res = await fetch(`${API_BASE}/api/transactions`);
     const data = await res.json();
     state.transactions = data.transactions || [];
-    renderTransactionsTable(state.transactions);
+    state.filteredTransactions = state.transactions;
+    state.visibleTxnLimit = 10;
+    renderTransactionsTable(state.filteredTransactions);
   } catch (err) {
     console.error("Failed fetching transactions:", err);
   }
@@ -400,7 +522,7 @@ function filterTransactions() {
   const cat = document.getElementById("filter-category").value;
   const type = document.getElementById("filter-type").value;
 
-  const filtered = state.transactions.filter(t => {
+  state.filteredTransactions = state.transactions.filter(t => {
     const searchable = `${t.party || ''} ${t.raw_text || ''} ${t.vpa || ''} ${t.category || ''}`.toLowerCase();
     if (search && !searchable.includes(search)) return false;
     if (cat !== "all" && (t.category || "").toLowerCase() !== cat.toLowerCase()) return false;
@@ -408,20 +530,24 @@ function filterTransactions() {
     return true;
   });
 
-  renderTransactionsTable(filtered);
+  state.visibleTxnLimit = 10; // Reset pagination to initial 10 on filter change
+  renderTransactionsTable(state.filteredTransactions);
 }
 
-// Render Transactions Table
+// Render Transactions Table (Paginated)
 function renderTransactionsTable(list) {
   const tbody = document.getElementById("txn-table-body");
   tbody.innerHTML = "";
 
   if (!list || list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 24px;">No matching transactions found.</td></tr>`;
+    updatePaginationControls(0, 0);
     return;
   }
 
-  list.forEach(t => {
+  const visibleList = list.slice(0, state.visibleTxnLimit);
+
+  visibleList.forEach(t => {
     const tr = document.createElement("tr");
     const isDebit = (t.type || "").toLowerCase() === "debit";
     const badgeClass = isDebit ? "badge-debit" : "badge-credit";
@@ -452,6 +578,29 @@ function renderTransactionsTable(list) {
     `;
     tbody.appendChild(tr);
   });
+
+  updatePaginationControls(visibleList.length, list.length);
+}
+
+// Update Pagination Load More Controls
+function updatePaginationControls(shownCount, totalCount) {
+  const info = document.getElementById("txn-pagination-info");
+  const btn = document.getElementById("btn-load-more");
+
+  if (info) {
+    info.textContent = `Showing ${shownCount} of ${totalCount} transactions`;
+  }
+
+  if (btn) {
+    if (shownCount >= totalCount) {
+      btn.style.display = "none";
+    } else {
+      btn.style.display = "inline-flex";
+      const remaining = totalCount - shownCount;
+      const nextBatch = Math.min(10, remaining);
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Load ${nextBatch} More Transactions (${remaining} remaining)`;
+    }
+  }
 }
 
 // Open Raw Transaction Modal
