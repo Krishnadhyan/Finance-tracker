@@ -10,7 +10,11 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from db_supabase import upsert_transactions
+from db_supabase import (
+    upsert_transactions,
+    get_last_processed_msg_id,
+    update_last_processed_msg_id
+)
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -168,7 +172,7 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
 
 def main():
     """Shows basic usage of the Gmail API.
-    Lists user's transaction messages and parses financial details.
+    Lists user's transaction messages and parses financial details cleanly.
     """
     creds = None
     if os.path.exists("token.json"):
@@ -187,6 +191,14 @@ def main():
     try:
         service = build("gmail", "v1", credentials=creds)
         query = 'from:alerts@hdfcbank.net OR from:alerts@hdfcbank.bank.in'
+        
+        # Read checkpoint from Supabase sync_state table
+        last_processed_id = get_last_processed_msg_id()
+        if last_processed_id:
+            print(f"[Incremental Sync] Checkpoint found. Will stop fetching at msg_id: {last_processed_id}")
+        else:
+            print("[Initial Sync] No checkpoint found. Will process full email history.")
+
         all_messages = []
         page_token = None
 
@@ -199,16 +211,27 @@ def main():
                 pageToken=page_token
             ).execute()
             messages = results.get("messages", [])
-            all_messages.extend(messages)
+            
+            stop_early = False
+            for m in messages:
+                if last_processed_id and m['id'] == last_processed_id:
+                    stop_early = True
+                    break
+                all_messages.append(m)
+
+            if stop_early:
+                print(f"[Incremental Sync] Reached last processed message checkpoint ({last_processed_id}). Stopping Gmail fetch.")
+                break
+
             page_token = results.get("nextPageToken")
             if not page_token:
                 break
 
         if not all_messages:
-            print("No messages found matching the query.")
+            print("No new messages found since last checkpoint.")
             return
 
-        print(f"Successfully retrieved a total of {len(all_messages)} messages!")
+        print(f"Successfully retrieved {len(all_messages)} new/unprocessed messages!")
 
         transactions = []
         for index, message in enumerate(all_messages, start=1):
@@ -239,6 +262,11 @@ def main():
 
         # Upsert transactions to Supabase Cloud PostgreSQL
         upsert_transactions(transactions)
+
+        # Update checkpoint in sync_state with the newest processed msg_id (first item in all_messages)
+        if all_messages:
+            newest_msg_id = all_messages[0]['id']
+            update_last_processed_msg_id(newest_msg_id)
 
     except HttpError as error:
         print(f"An error occurred with Gmail API: {error}")

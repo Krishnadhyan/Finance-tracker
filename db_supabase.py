@@ -71,6 +71,40 @@ def get_supabase_client():
         return None
 
 
+def get_last_processed_msg_id():
+    """Fetch the last processed Gmail Message ID from sync_state table."""
+    client = get_supabase_client()
+    if not client:
+        return None
+    try:
+        res = client.table("sync_state").select("value").eq("key", "last_processed_msg_id").execute()
+        if res.data and len(res.data) > 0:
+            msg_id = res.data[0].get("value")
+            print(f"[Supabase Checkpoint] Last processed msg_id: {msg_id}")
+            return msg_id
+    except Exception as e:
+        print(f"[Supabase Note] Could not fetch sync_state checkpoint: {e}")
+    return None
+
+
+def update_last_processed_msg_id(newest_msg_id):
+    """Update the last processed Gmail Message ID in sync_state table."""
+    client = get_supabase_client()
+    if not client or not newest_msg_id:
+        return False
+    try:
+        client.table("sync_state").upsert({
+            "key": "last_processed_msg_id",
+            "value": newest_msg_id,
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        }).execute()
+        print(f"[Supabase Checkpoint] Updated last_processed_msg_id to: {newest_msg_id}")
+        return True
+    except Exception as e:
+        print(f"[Supabase Error] Failed to update sync_state: {e}")
+        return False
+
+
 def upsert_transactions(transactions):
     """Upsert structured transactions into Supabase PostgreSQL database."""
     client = get_supabase_client()
@@ -214,6 +248,59 @@ def calculate_amb_metrics(target_amb=10000.0, current_balance=0.0, cycle_start_d
     }
 
 
+def get_full_sql_schema():
+    """Returns SQL statements for all required tables in Supabase SQL Editor."""
+    return """
+-- Execute the following SQL in Supabase -> SQL Editor:
+
+-- 1. Transactions Table
+CREATE TABLE IF NOT EXISTS transactions (
+    id TEXT PRIMARY KEY,
+    date DATE NOT NULL,
+    timestamp_ms BIGINT,
+    day_of_week TEXT,
+    time TEXT,
+    amount NUMERIC(12,2) NOT NULL,
+    type TEXT NOT NULL,
+    direction TEXT,
+    party TEXT,
+    vpa TEXT,
+    bank TEXT,
+    category TEXT,
+    sub_category TEXT,
+    notes TEXT,
+    raw_text TEXT,
+    source TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Sync State Checkpoint Table
+CREATE TABLE IF NOT EXISTS sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Monthly Anchors Table
+CREATE TABLE IF NOT EXISTS monthly_anchors (
+    month_year TEXT PRIMARY KEY,
+    anchor_balance NUMERIC(12,2) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Daily Balances Table
+CREATE TABLE IF NOT EXISTS daily_balances (
+    date DATE PRIMARY KEY,
+    closing_balance NUMERIC(12,2) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_party ON transactions(party);
+"""
+
+
 def sync_existing_json_to_supabase():
     """Import existing transactions.json file into Supabase cloud database."""
     json_path = "transactions.json"
@@ -230,9 +317,14 @@ if __name__ == "__main__":
     print("=== Supabase Finance Tracker & AMB Engine ===")
     if is_supabase_configured():
         print(f"Supabase configured: Connected to {SUPABASE_URL}")
-        sync_existing_json_to_supabase()
+        last_id = get_last_processed_msg_id()
+        if not last_id:
+            print("No checkpoint found in sync_state. Importing initial dataset...")
+            sync_existing_json_to_supabase()
     else:
         print("[Note] Supabase credentials not set in .env yet.")
+        print("\n--- Full SQL Schema To Run in Supabase SQL Editor ---")
+        print(get_full_sql_schema())
 
     print("\n--- Average Monthly Balance (AMB) Calculation Engine ---")
     metrics = calculate_amb_metrics(target_amb=10000.0, current_balance=6000.0)
