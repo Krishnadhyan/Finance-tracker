@@ -183,6 +183,18 @@ function renderOverview(data) {
   netFlowEl.style.color = netFlow >= 0 ? "#10b981" : "#f43f5e";
   document.getElementById("kpi-flow-sub").textContent = `Credits (₹${data.total_credit.toLocaleString()}) - Debits (₹${data.total_debit.toLocaleString()})`;
 
+  // Render Health Score KPI
+  if (data.health_score) {
+    const hs = data.health_score;
+    const hsEl = document.getElementById("kpi-health-score");
+    if (hsEl) {
+      hsEl.textContent = `${hs.score}/100`;
+      hsEl.style.color = hs.score >= 85 ? "#10b981" : (hs.score >= 70 ? "#f59e0b" : "#f43f5e");
+    }
+    const hrEl = document.getElementById("kpi-health-rating");
+    if (hrEl) hrEl.textContent = `Rating: ${hs.rating}`;
+  }
+
   // Render Alert Banner
   const alertBanner = document.getElementById("amb-alert-banner");
   if (fc.status === "WARNING" || fc.shortfall > 0) {
@@ -197,10 +209,43 @@ function renderOverview(data) {
     document.getElementById("alert-message").textContent = fc.message;
   }
 
-  // Render Category Bars & Pie Chart
+  // Render Category Bars, Pie Chart & Recurring Subs
   renderCategoryBars(data.category_breakdown, data.total_debit);
   renderPieChart(data.category_breakdown, data.total_debit);
+  renderRecurringSubscriptions(data.recurring_subscriptions);
 }
+
+// Render Recurring Subscriptions & AutoPays
+function renderRecurringSubscriptions(list) {
+  const container = document.getElementById("recurring-subs-grid");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!list || list.length === 0) {
+    container.innerHTML = `<p class="sub-text">No recurring subscriptions or AutoPay commitments detected yet.</p>`;
+    return;
+  }
+
+  list.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "recurring-card";
+    card.innerHTML = `
+      <div class="recurring-head">
+        <span class="sub-chip">${item.category || 'General'}</span>
+        <span>${item.count} Txns</span>
+      </div>
+      <div class="recurring-party">${item.party}</div>
+      <div class="recurring-amt">₹${item.last_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+      <div class="sub-text" style="font-size: 11.5px;">Last debit: ${item.last_date || 'recent'}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// Export CSV Function
+window.exportTransactionsCSV = function() {
+  window.location.href = `${API_BASE}/api/export/csv`;
+};
 
 // Category Colors for Pie Chart & Bars
 const CATEGORY_COLORS = {

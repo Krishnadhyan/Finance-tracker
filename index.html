@@ -121,6 +121,15 @@
             <div class="kpi-value" id="kpi-net-flow">₹0.00</div>
             <div class="kpi-sub" id="kpi-flow-sub">Credits vs Debits</div>
           </div>
+
+          <div class="kpi-card rose-card">
+            <div class="kpi-head">
+              <span>Financial Health Index</span>
+              <span class="kpi-icon">🛡️</span>
+            </div>
+            <div class="kpi-value" id="kpi-health-score">--/100</div>
+            <div class="kpi-sub" id="kpi-health-rating">Evaluating compliance...</div>
+          </div>
         </div>
 
         <!-- Quick Access Feature Shortcut Bar -->
@@ -174,6 +183,20 @@
             <div id="category-bars" class="category-bars-list mt-4">
               <!-- Dynamically populated bars -->
             </div>
+          </div>
+        </div>
+
+        <!-- Recurring Subscriptions & AutoPay Detector -->
+        <div class="glass-panel mt-6">
+          <div class="panel-header">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Detected Recurring Subscriptions & AutoPay Commitments
+            </h3>
+            <span class="tag-pill purple-pill">Auto-Detected</span>
+          </div>
+          <div id="recurring-subs-grid" class="recurring-grid">
+            <!-- Dynamically populated -->
           </div>
         </div>
       </section>
@@ -290,6 +313,11 @@
                 <option value="debit">Debits Only</option>
                 <option value="credit">Credits Only</option>
               </select>
+
+              <button id="btn-export-csv" class="btn btn-secondary" onclick="exportTransactionsCSV()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export CSV
+              </button>
             </div>
           </div>
 

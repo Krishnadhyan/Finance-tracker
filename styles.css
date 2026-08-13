@@ -241,6 +241,52 @@ body {
 .cyan-card { border-top: 3px solid var(--accent-cyan); }
 .amber-card { border-top: 3px solid var(--accent-amber); }
 .green-card { border-top: 3px solid var(--accent-green); }
+.rose-card { border-top: 3px solid var(--accent-rose); }
+
+/* Recurring Subscriptions Grid */
+.recurring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.recurring-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.recurring-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-highlight);
+}
+
+.recurring-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.recurring-party {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.recurring-amt {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  color: #f43f5e;
+}
 
 .kpi-head {
   display: flex;

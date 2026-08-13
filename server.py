@@ -107,6 +107,128 @@ class FinanceTrackerHandler(SimpleHTTPRequestHandler):
         today_str = datetime.date.today().strftime("%Y-%m")
         forecast = forecast_amb(month_year_str=today_str, transactions_list=transactions)
 
+def detect_recurring_subscriptions(transactions):
+    """Detect recurring merchants and AutoPay commitments."""
+    party_map = {}
+    for t in transactions:
+        amt = float(t.get("amount") or 0.0)
+        party = (t.get("party") or "Unknown").strip()
+        t_type = (t.get("type") or "").lower()
+        if t_type == "debit" and amt > 0 and party != "Unknown":
+            if party not in party_map:
+                party_map[party] = []
+            party_map[party].append(t)
+
+    recurring = []
+    for party, txns in party_map.items():
+        is_sub_keyword = any(kw in party.lower() for kw in ["google play", "jio", "hotstar", "autopay", "e-mandate", "broadband", "finance", "airtel", "netflix", "prime"])
+        if len(txns) >= 2 or is_sub_keyword:
+            latest = sorted(txns, key=lambda x: x.get("timestamp_ms", 0), reverse=True)[0]
+            avg_amt = sum(float(x.get("amount") or 0) for x in txns) / len(txns)
+            cat, _ = auto_categorize(party, latest.get("raw_text"))
+            recurring.append({
+                "party": party,
+                "count": len(txns),
+                "last_amount": round(float(latest.get("amount") or 0), 2),
+                "avg_amount": round(avg_amt, 2),
+                "last_date": latest.get("date"),
+                "category": cat
+            })
+    return sorted(recurring, key=lambda x: x["last_amount"], reverse=True)[:8]
+
+
+def calculate_health_score(forecast, total_credit, total_debit):
+    """Calculate 0-100 Financial Health & AMB Safety Score."""
+    current_amb = forecast.get("current_amb", 0)
+    target_amb = forecast.get("target_amb", 10000)
+    amb_ratio = min(1.0, current_amb / target_amb) if target_amb > 0 else 1.0
+    amb_score = round(amb_ratio * 40)
+
+    net_flow = total_credit - total_debit
+    savings_ratio = max(0.0, min(1.0, net_flow / total_credit)) if total_credit > 0 else 0.5
+    savings_score = round(savings_ratio * 35)
+
+    shortfall = forecast.get("shortfall", 0)
+    budget_score = 25 if shortfall == 0 else 10
+
+    total_score = min(100, max(0, amb_score + savings_score + budget_score))
+    rating = "EXCELLENT" if total_score >= 85 else ("GOOD" if total_score >= 70 else "NEEDS ATTENTION")
+
+    return {
+        "score": total_score,
+        "rating": rating,
+        "amb_score": amb_score,
+        "savings_score": savings_score,
+        "budget_score": budget_score
+    }
+
+
+class FinanceTrackerHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=WORKSPACE_DIR, **kwargs)
+
+    def _set_headers(self, status=200, content_type="application/json"):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_OPTIONS(self):
+        self._set_headers(200)
+
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query = parse_qs(parsed_path.query)
+
+        if path == "/api/overview":
+            self.handle_get_overview()
+        elif path == "/api/transactions":
+            self.handle_get_transactions(query)
+        elif path == "/api/amb/forecast":
+            self.handle_get_forecast(query)
+        elif path == "/api/supabase/status":
+            self.handle_get_supabase_status()
+        elif path == "/api/export/csv":
+            self.handle_get_export_csv()
+        else:
+            # Serve static files (index.html, styles.css, app.js, etc.)
+            super().do_GET()
+
+    def do_POST(self):
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        post_data = {}
+        if content_length > 0:
+            raw_body = self.rfile.read(content_length)
+            try:
+                post_data = json.loads(raw_body.decode("utf-8"))
+            except Exception:
+                post_data = {}
+
+        if path == "/api/categorize":
+            self.handle_post_categorize(post_data)
+        elif path == "/api/amb/forecast":
+            self.handle_post_forecast(post_data)
+        elif path == "/api/amb/anchor":
+            self.handle_post_anchor(post_data)
+        elif path == "/api/notify":
+            self.handle_post_notify(post_data)
+        elif path == "/api/sync":
+            self.handle_post_sync()
+        else:
+            self._set_headers(404)
+            self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode("utf-8"))
+
+    def handle_get_overview(self):
+        transactions = load_transactions_from_file_or_db()
+        today_str = datetime.date.today().strftime("%Y-%m")
+        forecast = forecast_amb(month_year_str=today_str, transactions_list=transactions)
+
         # Compute summary stats
         total_debit = 0.0
         total_credit = 0.0
@@ -125,6 +247,8 @@ class FinanceTrackerHandler(SimpleHTTPRequestHandler):
 
         supabase_ok = is_supabase_configured()
         checkpoint = get_last_processed_msg_id() if supabase_ok else "Local JSON"
+        recurring = detect_recurring_subscriptions(transactions)
+        health = calculate_health_score(forecast, total_credit, total_debit)
 
         res_data = {
             "timestamp": datetime.datetime.now().isoformat(),
@@ -135,11 +259,44 @@ class FinanceTrackerHandler(SimpleHTTPRequestHandler):
             "category_breakdown": {k: round(v, 2) for k, v in category_breakdown.items()},
             "amb_forecast": forecast,
             "supabase_configured": supabase_ok,
-            "checkpoint_msg_id": checkpoint
+            "checkpoint_msg_id": checkpoint,
+            "recurring_subscriptions": recurring,
+            "health_score": health
         }
 
         self._set_headers(200)
         self.wfile.write(json.dumps(res_data).encode("utf-8"))
+
+    def handle_get_export_csv(self):
+        transactions = load_transactions_from_file_or_db()
+        lines = ["ID,Date,Time,Day,Merchant/Party,VPA,Bank,Amount,Type,Category,SubCategory,RawText"]
+        for t in transactions:
+            cat, sub_cat = auto_categorize(t.get("party"), t.get("raw_text"))
+            party_clean = (t.get("party") or "").replace('"', '""')
+            raw_clean = (t.get("raw_text") or "").replace('"', '""')[:100]
+            row = [
+                f'"{t.get("id", "")}"',
+                f'"{t.get("date", "")}"',
+                f'"{t.get("time", "")}"',
+                f'"{t.get("day_of_week", "")}"',
+                f'"{party_clean}"',
+                f'"{t.get("vpa", "")}"',
+                f'"{t.get("bank", "")}"',
+                str(t.get("amount", 0)),
+                f'"{t.get("type", "")}"',
+                f'"{cat}"',
+                f'"{sub_cat}"',
+                f'"{raw_clean}"'
+            ]
+            lines.append(",".join(row))
+
+        csv_content = "\n".join(lines)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv")
+        self.send_header("Content-Disposition", 'attachment; filename="ai_finance_tracker_transactions.csv"')
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(csv_content.encode("utf-8"))
 
     def handle_get_transactions(self, query):
         transactions = load_transactions_from_file_or_db()
