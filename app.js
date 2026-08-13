@@ -521,7 +521,10 @@ function renderSimulatorResults(fc) {
 
   document.getElementById("sim-res-amb").textContent = `₹${fc.current_amb.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
   document.getElementById("sim-res-days").textContent = `${fc.days_passed} / ${fc.days_remaining}`;
-  document.getElementById("sim-res-target-sum").textContent = `₹${fc.total_target_sum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  const targetAmbEl = document.getElementById("sim-res-target-amb");
+  if (targetAmbEl) {
+    targetAmbEl.textContent = `₹${fc.target_amb.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  }
   document.getElementById("sim-res-req-daily").textContent = `₹${fc.required_daily_balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
   const shortfallEl = document.getElementById("sim-res-shortfall");
