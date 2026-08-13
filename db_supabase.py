@@ -1,12 +1,16 @@
 import os
+import json
 import datetime
 import calendar
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+    SUPABASE_URL = f"https://{SUPABASE_URL}.supabase.co"
+
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
 # Auto-categorization rule mapping
 CATEGORY_RULES = [
@@ -26,6 +30,23 @@ def auto_categorize(party, raw_text):
         if any(kw in text_search for kw in keywords):
             return category, sub_category
     return "General / Uncategorized", "Other"
+
+
+def parse_to_iso_date(date_str):
+    """Parse various date string formats into standard ISO YYYY-MM-DD for PostgreSQL DATE columns."""
+    if not date_str:
+        return None
+    clean_d = date_str.replace("/", "-").strip()
+    parts = clean_d.split("-")
+    if len(parts) == 3:
+        p1, p2, p3 = parts[0], parts[1], parts[2]
+        if len(p1) == 4:
+            return f"{p1}-{p2.zfill(2)}-{p3.zfill(2)}"
+        elif len(p3) == 4:
+            return f"{p3}-{p2.zfill(2)}-{p1.zfill(2)}"
+        elif len(p1) == 2 and len(p3) == 2:
+            return f"20{p3}-{p2.zfill(2)}-{p1.zfill(2)}"
+    return date_str
 
 
 def is_supabase_configured():
@@ -60,20 +81,11 @@ def upsert_transactions(transactions):
     records = []
     for t in transactions:
         cat, sub_cat = auto_categorize(t.get("party"), t.get("raw_text"))
-        
-        # Parse date to YYYY-MM-DD format if needed
-        date_str = t.get("date", "")
-        formatted_date = date_str
-        if date_str and "-" in date_str:
-            parts = date_str.split("-")
-            if len(parts) == 3:
-                if len(parts[0]) == 2 and len(parts[2]) == 2:
-                    # DD-MM-YY -> 20YY-MM-DD
-                    formatted_date = f"20{parts[2]}-{parts[1]}-{parts[0]}"
+        iso_date = parse_to_iso_date(t.get("date", ""))
 
         records.append({
             "id": t.get("id"),
-            "date": formatted_date,
+            "date": iso_date,
             "timestamp_ms": t.get("timestamp_ms", 0),
             "day_of_week": t.get("day_of_week"),
             "time": t.get("time"),
@@ -90,10 +102,14 @@ def upsert_transactions(transactions):
         })
 
     try:
-        response = client.table("transactions").upsert(records).execute()
-        count = len(response.data) if response.data else len(records)
-        print(f"[Supabase] Successfully upserted {count} transactions to cloud PostgreSQL.")
-        return count
+        chunk_size = 100
+        total_upserted = 0
+        for i in range(0, len(records), chunk_size):
+            chunk = records[i:i + chunk_size]
+            res = client.table("transactions").upsert(chunk).execute()
+            total_upserted += len(chunk)
+        print(f"[Supabase] Successfully upserted {total_upserted} transactions to cloud PostgreSQL.")
+        return total_upserted
     except Exception as e:
         print(f"[Supabase Error] Failed to upsert transactions: {e}")
         return 0
@@ -106,7 +122,7 @@ def log_daily_balance(date_str, closing_balance):
         return False
     try:
         record = {
-            "date": date_str,
+            "date": parse_to_iso_date(date_str),
             "closing_balance": float(closing_balance),
             "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
@@ -132,7 +148,6 @@ def calculate_amb_metrics(target_amb=10000.0, current_balance=0.0, cycle_start_d
     days_elapsed = day
     days_remaining = total_days - days_elapsed
 
-    # Fetch daily balance logs from Supabase if available
     client = get_supabase_client()
     balances = {}
     if client:
@@ -146,7 +161,6 @@ def calculate_amb_metrics(target_amb=10000.0, current_balance=0.0, cycle_start_d
         except Exception as e:
             print(f"[AMB Engine Note] Could not fetch daily_balances table: {e}")
 
-    # Build daily balance series for elapsed days (fallback to current_balance if log missing)
     accumulated_balance = 0.0
     for d in range(1, days_elapsed + 1):
         d_str = f"{year}-{month:02d}-{d:02d}"
@@ -200,65 +214,27 @@ def calculate_amb_metrics(target_amb=10000.0, current_balance=0.0, cycle_start_d
     }
 
 
-def get_sql_schema():
-    """Returns SQL statements to initialize Supabase PostgreSQL database tables."""
-    return """
--- Execute the following SQL in Supabase -> SQL Editor:
-
--- 1. Transactions Table
-CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT PRIMARY KEY,
-    date DATE NOT NULL,
-    timestamp_ms BIGINT,
-    day_of_week TEXT,
-    time TEXT,
-    amount NUMERIC(12,2) NOT NULL,
-    type TEXT NOT NULL,
-    direction TEXT,
-    party TEXT,
-    vpa TEXT,
-    bank TEXT,
-    category TEXT,
-    sub_category TEXT,
-    notes TEXT,
-    raw_text TEXT,
-    source TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Daily Balances Table
-CREATE TABLE IF NOT EXISTS daily_balances (
-    date DATE PRIMARY KEY,
-    closing_balance NUMERIC(12,2) NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. AMB Settings Table
-CREATE TABLE IF NOT EXISTS amb_settings (
-    id INT PRIMARY KEY DEFAULT 1,
-    target_amb NUMERIC(12,2) NOT NULL DEFAULT 10000.00,
-    cycle_start_day INT NOT NULL DEFAULT 1,
-    current_balance NUMERIC(12,2) NOT NULL DEFAULT 0.00,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_party ON transactions(party);
-"""
+def sync_existing_json_to_supabase():
+    """Import existing transactions.json file into Supabase cloud database."""
+    json_path = "transactions.json"
+    if not os.path.exists(json_path):
+        print(f"[Note] {json_path} not found.")
+        return 0
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    print(f"Loaded {len(data)} transactions from {json_path}. Uploading to Supabase...")
+    return upsert_transactions(data)
 
 
 if __name__ == "__main__":
     print("=== Supabase Finance Tracker & AMB Engine ===")
     if is_supabase_configured():
         print(f"Supabase configured: Connected to {SUPABASE_URL}")
+        sync_existing_json_to_supabase()
     else:
         print("[Note] Supabase credentials not set in .env yet.")
-        print("\n--- SQL Schema To Run in Supabase SQL Editor ---")
-        print(get_sql_schema())
 
-    # Demo AMB Engine calculation
-    print("\n--- Average Monthly Balance (AMB) Calculation Demo ---")
+    print("\n--- Average Monthly Balance (AMB) Calculation Engine ---")
     metrics = calculate_amb_metrics(target_amb=10000.0, current_balance=6000.0)
     for k, v in metrics.items():
         print(f"{k}: {v}")
