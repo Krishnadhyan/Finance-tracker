@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Finance Tracker & AMB Intelligence Dashboard</title>
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="main-header">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>AI Finance Tracker</h1>
+          <span class="sub-text">AMB Engine & Transaction Intelligence</span>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <div class="status-badge" id="cloud-status-badge">
+          <span class="status-dot"></span>
+          <span class="status-label" id="cloud-status-text">Connecting Supabase...</span>
+        </div>
+        <div class="status-badge sync-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          <span id="checkpoint-text">Msg Checkpoint: Loading...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-overview">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Overview & Ledger
+      </button>
+      <button class="nav-tab" data-tab="tab-amb">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        AMB Simulator
+      </button>
+      <button class="nav-tab" data-tab="tab-transactions">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Transactions
+      </button>
+      <button class="nav-tab" data-tab="tab-tagging">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        Vendor Tagging Studio
+      </button>
+      <button class="nav-tab" data-tab="tab-sync">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>
+        Cloud & Sync
+      </button>
+    </nav>
+
+    <!-- Alert Notification Banner (Dynamic) -->
+    <div id="amb-alert-banner" class="alert-banner warning-banner hidden">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-content">
+        <h4 id="alert-title">AMB Shortfall Warning</h4>
+        <p id="alert-message">Calculating AMB metrics...</p>
+      </div>
+      <div class="alert-actions">
+        <button id="btn-trigger-ntfy" class="btn btn-warning">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Send ntfy Push Alert
+        </button>
+      </div>
+    </div>
+
+    <!-- Main View Contents -->
+    <main class="main-content">
+
+      <!-- TAB 1: EXECUTIVE OVERVIEW -->
+      <section id="tab-overview" class="tab-pane active">
+        <!-- KPI Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card purple-card">
+            <div class="kpi-head">
+              <span>Current Available Balance</span>
+              <span class="kpi-icon">💰</span>
+            </div>
+            <div class="kpi-value" id="kpi-balance">₹0.00</div>
+            <div class="kpi-sub" id="kpi-anchor-info">Anchor Start: ₹10,000.00</div>
+          </div>
+
+          <div class="kpi-card cyan-card">
+            <div class="kpi-head">
+              <span>Current AMB (Average)</span>
+              <span class="kpi-icon">📈</span>
+            </div>
+            <div class="kpi-value" id="kpi-current-amb">₹0.00</div>
+            <div class="kpi-sub" id="kpi-target-amb">Target: ₹10,000.00</div>
+          </div>
+
+          <div class="kpi-card amber-card" id="card-req-balance">
+            <div class="kpi-head">
+              <span>Required Daily Balance</span>
+              <span class="kpi-icon">🎯</span>
+            </div>
+            <div class="kpi-value" id="kpi-req-daily">₹0.00</div>
+            <div class="kpi-sub" id="kpi-days-left">Remaining Days: 0</div>
+          </div>
+
+          <div class="kpi-card green-card">
+            <div class="kpi-head">
+              <span>Net Monthly Flow</span>
+              <span class="kpi-icon">🔄</span>
+            </div>
+            <div class="kpi-value" id="kpi-net-flow">₹0.00</div>
+            <div class="kpi-sub" id="kpi-flow-sub">Credits vs Debits</div>
+          </div>
+        </div>
+
+        <!-- EOD Balance Chart & Summary -->
+        <div class="grid-2col mt-6">
+          <div class="glass-panel">
+            <div class="panel-header">
+              <h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                Bank Ledger & Daily EOD Balance Simulation
+              </h3>
+              <span class="tag-pill cyan-pill" id="ledger-month-tag">Current Month</span>
+            </div>
+            <div class="chart-container">
+              <canvas id="eod-chart" height="220"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-panel">
+            <div class="panel-header">
+              <h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                Category Spending Breakdown
+              </h3>
+            </div>
+            <div id="category-bars" class="category-bars-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: AMB SIMULATOR STUDIO -->
+      <section id="tab-amb" class="tab-pane">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3>⚡ Interactive AMB Forecast & What-If Deposit Simulator</h3>
+            <span class="tag-pill purple-pill">Proactive Financial Shield</span>
+          </div>
+
+          <div class="grid-2col">
+            <!-- Controls Form -->
+            <div class="simulator-controls">
+              <div class="form-group">
+                <label for="sim-target-amb">Target Minimum Average Monthly Balance (AMB)</label>
+                <div class="range-group">
+                  <input type="range" id="sim-target-slider" min="1000" max="50000" step="1000" value="10000">
+                  <input type="number" id="sim-target-amb" value="10000" class="input-field">
+                </div>
+              </div>
+
+              <div class="form-group mt-4">
+                <label for="sim-anchor-balance">Monthly Starting Balance (Anchor)</label>
+                <input type="number" id="sim-anchor-balance" value="10000" class="input-field">
+              </div>
+
+              <div class="simulator-box mt-4">
+                <h4>🧪 Test What-If Scenario (Today)</h4>
+                <div class="grid-2col gap-4 mt-2">
+                  <div class="form-group">
+                    <label for="sim-deposit">Simulated Instant Deposit (₹)</label>
+                    <input type="number" id="sim-deposit" placeholder="e.g. 5000" value="0" class="input-field">
+                  </div>
+                  <div class="form-group">
+                    <label for="sim-expense">Simulated Instant Expense (₹)</label>
+                    <input type="number" id="sim-expense" placeholder="e.g. 2000" value="0" class="input-field">
+                  </div>
+                </div>
+              </div>
+
+              <div class="btn-row mt-4">
+                <button id="btn-recalculate-sim" class="btn btn-primary">Recalculate Forecast</button>
+                <button id="btn-save-anchor" class="btn btn-secondary">Save Anchor to Supabase</button>
+              </div>
+            </div>
+
+            <!-- Live Calculation Results -->
+            <div class="simulator-results-panel">
+              <div class="sim-status-box" id="sim-status-box">
+                <div class="status-header">
+                  <span class="status-badge-lg" id="sim-status-badge">SAFE</span>
+                  <span class="month-label" id="sim-month-label">Month: --</span>
+                </div>
+                <div class="sim-stats-grid mt-4">
+                  <div class="sim-stat">
+                    <span>Simulated Current AMB</span>
+                    <strong id="sim-res-amb">₹0.00</strong>
+                  </div>
+                  <div class="sim-stat">
+                    <span>Days Elapsed / Remaining</span>
+                    <strong id="sim-res-days">0 / 0</strong>
+                  </div>
+                  <div class="sim-stat">
+                    <span>Target Total Sum Needed</span>
+                    <strong id="sim-res-target-sum">₹0.00</strong>
+                  </div>
+                  <div class="sim-stat">
+                    <span>Required Daily Balance</span>
+                    <strong id="sim-res-req-daily" class="text-amber">₹0.00</strong>
+                  </div>
+                  <div class="sim-stat full-width">
+                    <span>Shortfall / Emergency Deposit Needed</span>
+                    <strong id="sim-res-shortfall" class="text-danger">₹0.00</strong>
+                  </div>
+                </div>
+
+                <div class="sim-message-box mt-4" id="sim-message-box">
+                  <!-- Message text -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: TRANSACTIONS EXPLORER -->
+      <section id="tab-transactions" class="tab-pane">
+        <div class="glass-panel">
+          <!-- Filter Bar -->
+          <div class="filter-bar">
+            <div class="search-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="txn-search" placeholder="Search by merchant, VPA, email text..." class="search-input">
+            </div>
+
+            <div class="filter-selects">
+              <select id="filter-category" class="select-field">
+                <option value="all">All Categories</option>
+                <option value="Food & Dining">Food & Dining</option>
+                <option value="Utilities">Bills & Utilities</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Transport">Travel & Transport</option>
+                <option value="Groceries">Groceries</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Health & Medical">Health & Medical</option>
+                <option value="Transfers & Personal">Transfers & Personal</option>
+                <option value="Uncategorized">Uncategorized</option>
+              </select>
+
+              <select id="filter-type" class="select-field">
+                <option value="all">All Types</option>
+                <option value="debit">Debits Only</option>
+                <option value="credit">Credits Only</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Transaction Table -->
+          <div class="table-wrapper mt-4">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date & Time</th>
+                  <th>Merchant / Party</th>
+                  <th>Category</th>
+                  <th>Amount (₹)</th>
+                  <th>Type</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="txn-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: VENDOR TAGGING STUDIO -->
+      <section id="tab-tagging" class="tab-pane">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3>🤖 Deterministic Vendor Memory & Auto-Tagging Studio</h3>
+            <span class="tag-pill cyan-pill">Phase 1 Pattern Engine</span>
+          </div>
+
+          <div class="grid-2col">
+            <!-- Tester Input -->
+            <div class="tagging-tester">
+              <h4>Test Any Vendor Name / Email Text</h4>
+              <p class="sub-text">Experience how the 4-layer engine matches vendors, rules, or personal transfers.</p>
+
+              <div class="form-group mt-4">
+                <label for="tag-party-input">Party / Merchant Name</label>
+                <input type="text" id="tag-party-input" placeholder="e.g. ZOMATO LIMITED, JIO RECHARGE, DR SMITH..." class="input-field">
+              </div>
+
+              <div class="form-group mt-4">
+                <label for="tag-raw-input">Raw Email Text (Optional)</label>
+                <textarea id="tag-raw-input" rows="3" placeholder="e.g. Rs. 450 debited towards Nandhini Deluxe..." class="input-field"></textarea>
+              </div>
+
+              <button id="btn-test-tag" class="btn btn-primary mt-4">Run Deterministic Categorize</button>
+
+              <!-- Result Box -->
+              <div id="tag-result-box" class="tag-result-box mt-4 hidden">
+                <div class="tag-res-header">Matched Category</div>
+                <div class="tag-res-pills">
+                  <span class="category-chip" id="res-cat-chip">Category</span>
+                  <span class="sub-chip" id="res-subcat-chip">Sub-category</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Built-in Rules Showcase -->
+            <div class="vendor-memory-list">
+              <h4>Current Vendor Memory Cache</h4>
+              <div class="memory-grid mt-3">
+                <div class="mem-item"><strong>ZOMATO / SWIGGY</strong> <span>Food & Dining</span></div>
+                <div class="mem-item"><strong>UBER / IRCTC</strong> <span>Travel & Transport</span></div>
+                <div class="mem-item"><strong>JIO / BESCOM / BANGALORE BROADBAND</strong> <span>Bills & Utilities</span></div>
+                <div class="mem-item"><strong>BLINKIT / ZEPTO</strong> <span>Groceries</span></div>
+                <div class="mem-item"><strong>AMAZON / FLIPKART</strong> <span>Shopping</span></div>
+                <div class="mem-item"><strong>GOOGLE PLAY / HOTSTAR</strong> <span>Entertainment</span></div>
+                <div class="mem-item"><strong>APOLLO / SREE LAKSHMI MEDICALS</strong> <span>Health & Medical</span></div>
+                <div class="mem-item"><strong>Personal Transfer (Mr/Mrs/Names)</strong> <span>Transfers & Personal</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: CLOUD & SYNC SETTINGS -->
+      <section id="tab-sync" class="tab-pane">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3>☁️ Supabase Cloud DB & Gmail Sync Checkpoint</h3>
+            <span class="tag-pill green-pill">Cloud Integration</span>
+          </div>
+
+          <div class="grid-2col">
+            <div class="sync-card">
+              <h4>Supabase PostgreSQL Connection</h4>
+              <p class="sub-text mt-1">Status of your cloud database connection specified in <code>.env</code>.</p>
+              
+              <div class="info-row mt-4">
+                <span>Supabase URL:</span>
+                <code id="sync-url">Loading...</code>
+              </div>
+
+              <div class="info-row mt-2">
+                <span>Last Processed Gmail Message ID:</span>
+                <code id="sync-msg-id">Loading...</code>
+              </div>
+
+              <button id="btn-sync-cloud" class="btn btn-secondary mt-4">
+                Sync Local transactions.json to Supabase Cloud
+              </button>
+            </div>
+
+            <div class="sync-card">
+              <h4>Gmail Incremental Sync Architecture</h4>
+              <p class="sub-text mt-1">How the tracker maintains zero duplicate syncs:</p>
+              <ul class="feature-list mt-3">
+                <li>✅ <strong>Sync Checkpoint:</strong> Stores `last_processed_msg_id` in Supabase `sync_state`.</li>
+                <li>✅ <strong>Incremental Fetch:</strong> Stops Gmail API loop immediately when hitting checkpoint ID.</li>
+                <li>✅ <strong>Deterministic Upsert:</strong> Uses unique transaction ID format `TXN_DATE_MSGID` to guarantee idempotency.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Raw Text Modal -->
+  <div id="txn-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-title">Transaction Details</h3>
+        <button id="modal-close" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-row"><strong>ID:</strong> <span id="modal-id"></span></div>
+        <div class="modal-row"><strong>Date:</strong> <span id="modal-date"></span></div>
+        <div class="modal-row"><strong>Amount:</strong> <span id="modal-amount"></span></div>
+        <div class="modal-row"><strong>Party:</strong> <span id="modal-party"></span></div>
+        <div class="modal-row"><strong>VPA:</strong> <span id="modal-vpa"></span></div>
+        <div class="modal-row"><strong>Bank / Source:</strong> <span id="modal-source"></span></div>
+        <div class="modal-row mt-3"><strong>Raw Email Alert Text:</strong></div>
+        <div class="raw-text-box" id="modal-raw"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
