@@ -216,11 +216,13 @@ body {
   margin-top: 2px;
 }
 
-/* KPI Cards */
+/* KPI Cards & Grid Stacking */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 18px;
+  position: relative;
+  z-index: 20;
 }
 
 .kpi-card {
@@ -230,18 +232,22 @@ body {
   padding: 20px;
   backdrop-filter: blur(16px);
   transition: transform 0.2s ease, border-color 0.2s ease;
+  position: relative;
 }
 
 .kpi-card:hover {
   transform: translateY(-2px);
   border-color: var(--border-highlight);
+  z-index: 500;
 }
 
-.purple-card { border-top: 3px solid var(--accent-purple); }
-.cyan-card { border-top: 3px solid var(--accent-cyan); }
-.amber-card { border-top: 3px solid var(--accent-amber); }
-.green-card { border-top: 3px solid var(--accent-green); }
-.rose-card { border-top: 3px solid var(--accent-rose); }
+.rose-card {
+  border-top: 3px solid var(--accent-rose);
+}
+
+.rose-card:hover {
+  z-index: 9999;
+}
 
 /* Floating Tooltip Bubble */
 .tooltip-wrapper {
@@ -253,20 +259,21 @@ body {
 
 .tooltip-bubble {
   position: absolute;
-  top: 130%;
+  bottom: 130%;
   right: 0;
-  width: 270px;
-  background: rgba(18, 24, 38, 0.96);
+  top: auto;
+  width: 275px;
+  background: #121826;
   border: 1px solid var(--border-highlight);
   border-radius: var(--radius-md);
   padding: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(244, 63, 94, 0.25);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.95), 0 0 20px rgba(244, 63, 94, 0.35);
+  backdrop-filter: blur(20px);
   opacity: 0;
   visibility: hidden;
-  transform: translateY(6px);
+  transform: translateY(-6px);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 100;
+  z-index: 999999 !important;
   pointer-events: none;
   text-align: left;
 }
@@ -278,17 +285,20 @@ body {
   pointer-events: auto;
 }
 
-/* Tooltip Pointer Arrow */
+/* Tooltip Pointer Arrow (Pointing Down) */
 .tooltip-bubble::before {
   content: '';
   position: absolute;
-  top: -6px;
-  right: 10px;
+  bottom: -6px;
+  right: 12px;
+  top: auto;
   width: 10px;
   height: 10px;
   background: #121826;
-  border-left: 1px solid var(--border-highlight);
-  border-top: 1px solid var(--border-highlight);
+  border-right: 1px solid var(--border-highlight);
+  border-bottom: 1px solid var(--border-highlight);
+  border-top: none;
+  border-left: none;
   transform: rotate(45deg);
 }
 
