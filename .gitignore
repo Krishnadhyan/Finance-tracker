@@ -1,0 +1,19 @@
+# OAuth and sensitive credentials
+credentials.json
+token.json
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache & build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Temporary files
+tempCodeRunnerFile.py
+hhghh
