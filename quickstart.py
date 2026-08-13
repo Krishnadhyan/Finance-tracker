@@ -268,8 +268,11 @@ def main():
             newest_msg_id = all_messages[0]['id']
             update_last_processed_msg_id(newest_msg_id)
 
+        return len(transactions)
+
     except HttpError as error:
         print(f"An error occurred with Gmail API: {error}")
+        return 0
 
 
 if __name__ == "__main__":

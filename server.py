@@ -96,6 +96,8 @@ class FinanceTrackerHandler(SimpleHTTPRequestHandler):
             self.handle_post_anchor(post_data)
         elif path == "/api/notify":
             self.handle_post_notify(post_data)
+        elif path == "/api/sync/gmail":
+            self.handle_post_sync_gmail()
         elif path == "/api/sync":
             self.handle_post_sync()
         else:
@@ -425,6 +427,23 @@ class FinanceTrackerHandler(SimpleHTTPRequestHandler):
             "upserted_count": count
         }).encode("utf-8"))
 
+    def handle_post_sync_gmail(self):
+        try:
+            import quickstart
+            count = quickstart.main()
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "success": True,
+                "synced_count": count or 0,
+                "message": f"Gmail Sync complete. Processed {count or 0} transactions."
+            }).encode("utf-8"))
+        except Exception as e:
+            self._set_headers(500)
+            self.wfile.write(json.dumps({
+                "success": False,
+                "error": str(e)
+            }).encode("utf-8"))
+
     def handle_get_supabase_status(self):
         self._set_headers(200)
         self.wfile.write(json.dumps({
@@ -433,7 +452,29 @@ class FinanceTrackerHandler(SimpleHTTPRequestHandler):
         }).encode("utf-8"))
 
 
+import threading
+import time
+
+def start_background_auto_sync(interval_seconds=600):
+    """Background daemon thread running incremental Gmail sync every 10 mins."""
+    def worker():
+        print(f"[Auto-Sync Engine] Background Gmail poller active (Interval: {interval_seconds}s).")
+        while True:
+            try:
+                time.sleep(interval_seconds)
+                print("[Auto-Sync Engine] Running scheduled background Gmail check...")
+                import quickstart
+                synced = quickstart.main()
+                print(f"[Auto-Sync Engine] Background sync complete. Synced {synced or 0} transactions.")
+            except Exception as e:
+                print(f"[Auto-Sync Engine Note] Periodic sync skipped/failed: {e}")
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+
 def run_server():
+    start_background_auto_sync(interval_seconds=600)
     server_address = ("", PORT)
     httpd = HTTPServer(server_address, FinanceTrackerHandler)
     print(f"🚀 AI Finance Tracker UI Server running at http://localhost:{PORT}")

@@ -733,7 +733,35 @@ async function syncCloudDatabase() {
   } catch (err) {
     alert("Sync failed: " + err.message);
   } finally {
-    btn.textContent = "Sync Local transactions.json to Supabase Cloud";
+    btn.textContent = "Sync JSON to Supabase Cloud";
     btn.disabled = false;
   }
 }
+
+// Trigger Gmail Incremental Sync
+window.syncGmailAlerts = async function() {
+  const btn = document.getElementById("btn-sync-gmail");
+  if (btn) {
+    btn.textContent = "Scanning Gmail Inbox...";
+    btn.disabled = true;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/sync/gmail`, { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      alert(`📩 ${data.message}`);
+      loadDashboardData();
+      loadTransactionsData();
+    } else {
+      alert(`⚠️ Gmail sync note: ${data.error}`);
+    }
+  } catch (err) {
+    alert("Gmail sync failed: " + err.message);
+  } finally {
+    if (btn) {
+      btn.textContent = "Fetch New Gmail Alerts Now";
+      btn.disabled = false;
+    }
+  }
+};

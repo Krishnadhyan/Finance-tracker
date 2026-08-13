@@ -451,18 +451,24 @@
                 <code id="sync-msg-id">Loading...</code>
               </div>
 
-              <button id="btn-sync-cloud" class="btn btn-secondary mt-4">
-                Sync Local transactions.json to Supabase Cloud
-              </button>
+              <div class="btn-row mt-4">
+                <button id="btn-sync-gmail" class="btn btn-primary" onclick="syncGmailAlerts()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  Fetch New Gmail Alerts Now
+                </button>
+                <button id="btn-sync-cloud" class="btn btn-secondary">
+                  Sync JSON to Supabase Cloud
+                </button>
+              </div>
             </div>
 
             <div class="sync-card">
-              <h4>Gmail Incremental Sync Architecture</h4>
-              <p class="sub-text mt-1">How the tracker maintains zero duplicate syncs:</p>
+              <h4>Gmail Auto-Sync Architecture</h4>
+              <p class="sub-text mt-1">Automatic background synchronization & duplicate prevention:</p>
               <ul class="feature-list mt-3">
-                <li>✅ <strong>Sync Checkpoint:</strong> Stores `last_processed_msg_id` in Supabase `sync_state`.</li>
-                <li>✅ <strong>Incremental Fetch:</strong> Stops Gmail API loop immediately when hitting checkpoint ID.</li>
-                <li>✅ <strong>Deterministic Upsert:</strong> Uses unique transaction ID format `TXN_DATE_MSGID` to guarantee idempotency.</li>
+                <li>⚙️ <strong>Background Auto-Poller:</strong> Server automatically scans Gmail every <strong>10 minutes</strong> in the background.</li>
+                <li>✅ <strong>Sync Checkpoint:</strong> Remembers `last_processed_msg_id` in Supabase `sync_state` to prevent duplicates.</li>
+                <li>🔔 <strong>Instant Push Alerts:</strong> Automatically sends a mobile push notification via <code>ntfy.sh</code> if an AMB shortfall occurs.</li>
               </ul>
             </div>
           </div>

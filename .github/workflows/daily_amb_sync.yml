@@ -1,0 +1,37 @@
+name: Autonomous Daily AMB Sync & Mobile Alert Pipeline
+
+on:
+  schedule:
+    # Runs daily at 18:00 UTC (11:30 PM IST)
+    - cron: '0 18 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+
+jobs:
+  amb-sync-job:
+    name: Run Daily AMB Check & Push Alert
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Check out Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🚀 Run Autonomous AMB Pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GMAIL_TOKEN_BASE64: ${{ secrets.GMAIL_TOKEN_BASE64 }}
+          GMAIL_CREDENTIALS_BASE64: ${{ secrets.GMAIL_CREDENTIALS_BASE64 }}
+        run: |
+          python cron_runner.py
