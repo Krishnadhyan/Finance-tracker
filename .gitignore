@@ -2,6 +2,10 @@
 credentials.json
 token.json
 
+# Environment variables & API keys
+.env
+.env.local
+
 # Virtual environment
 venv/
 .venv/

@@ -10,6 +10,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from db_supabase import upsert_transactions
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -56,49 +57,42 @@ def clean_html_to_text(html_or_text):
 
 def extract_party_and_vpa(clean_txt, txn_type):
     """Extract vendor/merchant name and VPA accurately across all HDFC alert formats."""
-    # 1. Truncate text before disclaimer/footer boilerplate
     body = re.split(r"(?:if you did not authorize|please call|sms block|\bref\.?\s*no|call \d+)", clean_txt, flags=re.IGNORECASE)[0]
 
     vpa = None
     party = None
 
-    # Extract VPA if present anywhere in body
     vpa_match = re.search(r'\b[\w\.-]+@[\w\.-]+\b', body)
     if vpa_match:
         vpa = vpa_match.group(0).strip()
 
-    # Pattern A: Sender: <NAME> (VPA: <VPA>) (Credit emails)
     sender_match = re.search(r"Sender:\s*([A-Za-z0-9\.\&\s\-\_]+?)(?:\s*\(VPA:\s*[\w\.-]+@[\w\.-]+\)|\s*on|\s*via|\.|$)", body, re.IGNORECASE)
     if sender_match and sender_match.group(1).strip():
         party = sender_match.group(1).strip()
         return party, vpa
 
-    # Pattern B: AutoPay / E-mandate for <MERCHANT>
     autopay_match = re.search(r"(?:payment for|payment of|for)\s+([A-Za-z0-9\.\&\s\-\_]+?)(?:\s*,\s*set|\s+was|\s+on|\.|$)", body, re.IGNORECASE)
     if any(k in body.lower() for k in ["autopay", "e-mandate", "auto payment"]) and autopay_match:
         party = autopay_match.group(1).strip()
         return party, vpa
 
-    # Pattern C: towards/to VPA <VPA> (<NAME>) or towards/to VPA <VPA> <NAME>
     vpa_name_match = re.search(r"(?:towards|to)\s+VPA\s+[\w\.-]+@[\w\.-]+\s+(?:\((.*?)\)|([A-Za-z0-9\.\&\s\-\_]+?))(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
     if vpa_name_match:
         party = (vpa_name_match.group(1) or vpa_name_match.group(2) or "").strip()
         if party:
             return party, vpa
 
-    # Pattern D: towards/to <NAME> on <DATE>
     towards_match = re.search(r"(?:towards|to)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
     if towards_match:
         cand = towards_match.group(1).strip()
         if "account" in cand.lower():
-            cand_sub = re.search(r"(?:to|towards)\s+(?:VPA\s+[\w\.-]+\s+)?(.*)", cand, re.IGNORECASE)
+            cand_sub = re.search(r"(?:to|towards)\s+(?:VPA\s+[\w\.-]+|\s+)?(.*)", cand, re.IGNORECASE)
             if cand_sub:
                 cand = cand_sub.group(1).strip()
         if cand and cand.lower() not in ["vpa", "account"]:
             party = cand
             return party, vpa
 
-    # Pattern E (Credit): credited ... by/from <NAME>
     if txn_type == "credit":
         credit_match = re.search(r"(?:from|by)\s+(?:VPA\s+[\w\.-]+@[\w\.-]+\s+)?(?:VPA\s+)?([A-Za-z0-9\.\&\s\-\_]+?)(?:\s+on|\s+via|\s+through|\s+ref|\.|$)", body, re.IGNORECASE)
         if credit_match:
@@ -114,7 +108,6 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
     """Extract structured transaction data from raw email text."""
     text_lower = clean_txt.lower()
 
-    # 1. Determine transaction type & direction
     txn_type = "unknown"
     direction = None
     if any(k in text_lower for k in ["debited", "paid to", "sent to", "transferred to", "spent"]):
@@ -124,7 +117,6 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
         txn_type = "credit"
         direction = "From"
 
-    # 2. Extract Amount (handles Rs. 1,500 or Rs 1500.50 or INR 500)
     amount = None
     amount_match = re.search(r"(?:Rs\.?|INR)\s*([\d,]+\.?\d*)", clean_txt, re.IGNORECASE)
     if amount_match:
@@ -134,7 +126,6 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
         except ValueError:
             amount = None
 
-    # 3. Extract Date & Time
     date = None
     date_match = re.search(r"(?:on|date)\s+(\d{2}[-/]\d{2}[-/]\d{2,4})", clean_txt, re.IGNORECASE)
     if date_match:
@@ -147,10 +138,8 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
     time_string = dt_object.strftime("%I:%M %p")
     day_of_week = dt_object.strftime("%A")
 
-    # 4. Extract Party/Merchant and VPA
     party, vpa = extract_party_and_vpa(clean_txt, txn_type)
 
-    # 5. Extract Bank Name
     bank = None
     if source_email:
         bank_match = re.search(r"@([\w-]+)", source_email)
@@ -163,6 +152,7 @@ def parse_transaction(clean_txt, msg_id, internal_date_ms, source_email=""):
     return {
         "id": txn_id,
         "date": date,
+        "timestamp_ms": internal_date_ms,
         "day_of_week": day_of_week,
         "time": time_string,
         "amount": amount,
@@ -246,6 +236,9 @@ def main():
         with open(output_file, "w") as f:
             json.dump(transactions, f, indent=4)
         print(f"\nSaved {len(transactions)} parsed transactions to {output_file}")
+
+        # Upsert transactions to Supabase Cloud PostgreSQL
+        upsert_transactions(transactions)
 
     except HttpError as error:
         print(f"An error occurred with Gmail API: {error}")
