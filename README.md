@@ -21,6 +21,18 @@ An autonomous, end-to-end personal finance management system that automatically 
 
 ---
 
+## 📸 Screenshots & Product Preview
+
+| Executive Overview & Financial Health | What-If AMB Deposit Simulator |
+| :---: | :---: |
+| ![Executive Overview](assets/dashboard_overview.png) | ![AMB Simulator](assets/amb_simulator.png) |
+
+| AutoPay & Subscription Detector | Real-Time Mobile Push Alert |
+| :---: | :---: |
+| ![AutoPay Detector](assets/autopay_subscriptions.png) | ![ntfy Push Alert](assets/mobile_alert.png) |
+
+---
+
 ## 🏗️ System Architecture
 
 ```mermaid
