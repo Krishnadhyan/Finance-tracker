@@ -2,9 +2,10 @@
 credentials.json
 token.json
 
-# Environment variables & API keys
+# Environment variables & API keys & Personal transaction data
 .env
 .env.local
+transactions.json
 
 # Virtual environment
 venv/

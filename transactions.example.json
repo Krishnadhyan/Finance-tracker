@@ -1,0 +1,24 @@
+[
+    {
+        "id": "TXN_SAMPLE_001",
+        "date": "01-08-26",
+        "amount": 2500.0,
+        "type": "debit",
+        "party": "SWIGGY BANGALORE",
+        "category": "Food & Dining",
+        "sub_category": "Food Delivery",
+        "raw_text": "Rs.2500.00 debited from a/c **1234 on 01-08-26 to VPA swiggy@icici",
+        "timestamp_ms": 1785500000000
+    },
+    {
+        "id": "TXN_SAMPLE_002",
+        "date": "02-08-26",
+        "amount": 50000.0,
+        "type": "credit",
+        "party": "SALARY CREDIT ACME CORP",
+        "category": "Income & Salary",
+        "sub_category": "Salary",
+        "raw_text": "Rs.50000.00 credited to a/c **1234 on 02-08-26 by SALARY ACME CORP",
+        "timestamp_ms": 1785586400000
+    }
+]
