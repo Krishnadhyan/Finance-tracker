@@ -25,11 +25,11 @@ An autonomous, end-to-end personal finance management system that automatically 
 
 | Executive Overview & Financial Health | What-If AMB Deposit Simulator |
 | :---: | :---: |
-| ![Executive Overview](assets/dashboard_overview.png) | ![AMB Simulator](assets/amb_simulator.png) |
+| ![Executive Overview](assets/dashboard_overview.png) | ![AMB Simulator](assets/AMB_sim.png) |
 
-| AutoPay & Subscription Detector | Real-Time Mobile Push Alert |
+| AutoPay & Subscription Detector | Transactions Explorer & CSV Export |
 | :---: | :---: |
-| ![AutoPay Detector](assets/autopay_subscriptions.png) | ![ntfy Push Alert](assets/mobile_alert.png) |
+| ![AutoPay Detector](assets/recurring.png) | ![Transactions Explorer](assets/Transactions.png) |
 
 ---
 
