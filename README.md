@@ -31,6 +31,8 @@ An autonomous, end-to-end personal finance management system that automatically 
 | :---: | :---: |
 | ![AutoPay Detector](assets/recurring.png) | ![Transactions Explorer](assets/Transactions.png) |
 
+
+NOTE: Push-notification yet to be implemented :)
 ---
 
 ## 🏗️ System Architecture
